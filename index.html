@@ -1023,7 +1023,11 @@ async function syncNow() {
   await pullFromJsonbin();
 }
 
+let lastPushTime = 0;
+const PUSH_LOCK_MS = 8000; // bloquer les pulls pendant 8s après un push
+
 async function pushToJsonbin() {
+  lastPushTime = Date.now();
   try {
     const res = await fetch(JSONBIN_URL, {
       method: 'PUT',
@@ -1041,6 +1045,8 @@ async function pushToJsonbin() {
 }
 
 async function pullFromJsonbin() {
+  // Ne pas puller juste après un push (évite l'écrasement de l'état local)
+  if (Date.now() - lastPushTime < PUSH_LOCK_MS) return;
   try {
     const res = await fetch(JSONBIN_URL + '/latest', {
       headers: {
@@ -1051,7 +1057,6 @@ async function pullFromJsonbin() {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     if (data && data.done !== undefined) {
-      // Remplacer entièrement l'état local par l'état remote
       const remoteStr = JSON.stringify(data.done);
       const localStr = JSON.stringify(state.done);
       if (remoteStr !== localStr) {
