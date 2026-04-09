@@ -322,7 +322,8 @@
   .task-item.done .task-text {
     color: #8fa0b8;
     text-decoration: line-through;
-    text-decoration-color: rgba(255,255,255,0.1);
+    text-decoration-color: #8fa0b8;
+    text-decoration-thickness: 1.5px;
   }
 
   .task-people {
@@ -463,13 +464,13 @@
 <div class="controls">
   <label>Personne :</label>
   <div class="chip active" data-person="ALL" onclick="filterPerson(this)">Tous</div>
-  <div class="chip" data-person="PIERRE" onclick="filterPerson(this)"><span class="chip-dot" style="color:#38bdf8"></span>Pierre</div>
-  <div class="chip" data-person="CEDRIC" onclick="filterPerson(this)"><span class="chip-dot" style="color:#a78bfa"></span>Cédric</div>
-  <div class="chip" data-person="LIAM" onclick="filterPerson(this)"><span class="chip-dot" style="color:#fb923c"></span>Liam</div>
-  <div class="chip" data-person="LOURDES" onclick="filterPerson(this)"><span class="chip-dot" style="color:#f472b6"></span>Lourdes</div>
-  <div class="chip" data-person="MAHER" onclick="filterPerson(this)"><span class="chip-dot" style="color:#fbbf24"></span>Maher</div>
-  <div class="chip" data-person="ABDUL" onclick="filterPerson(this)"><span class="chip-dot" style="color:#34d399"></span>Abdul</div>
-  <div class="chip" data-person="EQUIPE" onclick="filterPerson(this)"><span class="chip-dot" style="color:#22d3ee"></span>Équipes</div>
+  <div class="chip" data-person="PIERRE" onclick="filterPerson(this)">Pierre</div>
+  <div class="chip" data-person="CEDRIC" onclick="filterPerson(this)">Cédric</div>
+  <div class="chip" data-person="LIAM" onclick="filterPerson(this)">Liam</div>
+  <div class="chip" data-person="LOURDES" onclick="filterPerson(this)">Lourdes</div>
+  <div class="chip" data-person="MAHER" onclick="filterPerson(this)">Maher</div>
+  <div class="chip" data-person="ABDUL" onclick="filterPerson(this)">Abdul</div>
+  <div class="chip" data-person="EQUIPE" onclick="filterPerson(this)">Équipes</div>
 
   &nbsp;
   <div class="search-wrap">
@@ -491,21 +492,20 @@
 // ══════════════════════════════════════
 const SECTIONS = [
   {
-    id: 'bank', label: 'Bank', color: '#38bdf8',
-    tasks: [
-      { id: 'b1', text: 'Provisional sales (3rd working day) — envoyer Octopus & Vivo Sales à Johnathan dès la fin de saisie des ventes', people: ['PIERRE','CEDRIC'] },
-      { id: 'b2', text: 'Edition / validation Rapprochements Bancaires (year end : écritures datées de Mai à transférer sur le HO)', people: ['EQUIPE SOUMAYA'] },
-      { id: 'b3', text: 'Vérifier solde du 41300001 + saisie des discounts charges', people: ['LIAM','CEDRIC'] },
-      { id: 'b4', text: 'Saisie des intérêts HSBC liés au prêt HSBC Guernsey + intérêts RBS loan rollover sur HSBC 919 (Saisie de la tréso du mois)', people: ['LOURDES','CEDRIC'] },
-    ]
-  },
-  {
     id: 'start', label: 'Start', color: '#34d399',
     tasks: [
       { id: 's1', text: "Vérifier l'initialisation des STATISTIQUES (+ INIMONTH) + initialisation des tables BAS", people: ['PIERRE','CEDRIC'] },
       { id: 's2', text: 'Annuler automatiquement les provisions M-1 BAS Jal 36 et lettrage des comptes de tiers des provisions', people: ['PIERRE','CEDRIC'] },
       { id: 's3', text: 'Ecritures du Journal 39', people: ['PIERRE','CEDRIC'] },
       { id: 's4', text: 'Faire les écritures jals 31/39 des factures reçues sur le mois pour les renewal leases 62260000/62262000/63512000', people: ['CEDRIC'] },
+    ]
+  },
+  {
+    id: 'bank', label: 'Bank', color: '#38bdf8',
+    tasks: [
+      { id: 'b2', text: 'Edition / validation Rapprochements Bancaires (year end : écritures datées de Mai à transférer sur le HO)', people: ['EQUIPE SOUMAYA'] },
+      { id: 'b3', text: 'Vérifier solde du 41300001 + saisie des discounts charges', people: ['LIAM','CEDRIC'] },
+      { id: 'b4', text: 'Saisie des intérêts HSBC liés au prêt HSBC Guernsey + intérêts RBS loan rollover sur HSBC 919 (Saisie de la tréso du mois)', people: ['LOURDES','CEDRIC'] },
     ]
   },
   {
@@ -521,6 +521,7 @@ const SECTIONS = [
   {
     id: 'sales', label: 'Sales', color: '#fb923c',
     tasks: [
+      { id: 'b1', text: 'Provisional sales (3rd working day) — envoyer Octopus & Vivo Sales à Johnathan dès la fin de saisie des ventes', people: ['PIERRE','CEDRIC'] },
       { id: 'sa1', text: 'Sales & balance re-allocation OCTOPUS (800/4100888) & VIVO USVF + réaffectation des balances des mois précédents', people: ['PIERRE','CEDRIC'] },
       { id: 'sa2', text: "Net GP Variation from YS — OCTOPUS GP : utiliser l'import table avec le tableau de Dan Haines", people: ['PIERRE'] },
       { id: 'sa3', text: 'Refacturation des ventes du National Account — à partir du 5ème WORKING DAYS (+ entité 810 à checker)', people: ['EQUIPE KATR ENNADA'] },
