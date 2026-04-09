@@ -815,14 +815,10 @@ function buildTask(task, color) {
 }
 
 function toggleTask(taskId) {
-  if (!state.explicitChanges) state.explicitChanges = {};
   if (state.done[taskId]) {
     delete state.done[taskId];
-    state.explicitChanges[taskId] = false; // décochée explicitement
   } else {
     state.done[taskId] = true;
-    state.explicitChanges[taskId] = true; // cochée explicitement
-    // Check if section complete
     checkSectionComplete(taskId);
   }
 
@@ -1018,7 +1014,7 @@ function toggleSyncConfig() {
 
 function startSync() {
   if (syncInterval) clearInterval(syncInterval);
-  syncInterval = setInterval(pullFromJsonbin, 30000);
+  syncInterval = setInterval(pullFromJsonbin, 10000);
   pullFromJsonbin();
 }
 
@@ -1028,44 +1024,17 @@ async function syncNow() {
 }
 
 async function pushToJsonbin() {
-  // Avant de pousser, on lit l'état remote et on fusionne
   try {
-    // 1. Lire l'état remote actuel
-    const getRes = await fetch(JSONBIN_URL + '/latest', {
-      headers: { 'X-Master-Key': JSONBIN_KEY, 'X-Bin-Meta': 'false' }
-    });
-    let remoteDone = {};
-    if (getRes.ok) {
-      const remoteData = await getRes.json();
-      if (remoteData && remoteData.done) remoteDone = remoteData.done;
-    }
-
-    // 2. Fusionner : appliquer les changements explicites de state.done
-    //    - Si une tâche est dans localExplicit (cochée = true, décochée = false) → elle prime
-    //    - Sinon garder l'état remote
-    const merged = Object.assign({}, remoteDone);
-    for (const id of Object.keys(state.explicitChanges || {})) {
-      if (state.explicitChanges[id] === true) merged[id] = true;
-      else delete merged[id];
-    }
-
-    // 3. Pousser la fusion
-    const putRes = await fetch(JSONBIN_URL, {
+    const res = await fetch(JSONBIN_URL, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_KEY },
-      body: JSON.stringify({ done: merged, ts: Date.now() })
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': JSONBIN_KEY
+      },
+      body: JSON.stringify({ done: state.done, ts: Date.now() })
     });
-
-    if (putRes.ok) {
-      // Mettre à jour l'état local avec la fusion
-      state.done = merged;
-      state.explicitChanges = {};
-      saveState();
-      softRefresh();
-      setSyncStatus('ok', 'Sync OK — ' + new Date().toLocaleTimeString('fr-FR'));
-    } else {
-      setSyncStatus('err', 'Erreur sync ' + putRes.status);
-    }
+    if (res.ok) setSyncStatus('ok', 'Sync OK — ' + new Date().toLocaleTimeString('fr-FR'));
+    else setSyncStatus('err', 'Erreur push ' + res.status);
   } catch(e) {
     setSyncStatus('err', 'Hors ligne');
   }
@@ -1074,24 +1043,26 @@ async function pushToJsonbin() {
 async function pullFromJsonbin() {
   try {
     const res = await fetch(JSONBIN_URL + '/latest', {
-      headers: { 'X-Master-Key': JSONBIN_KEY, 'X-Bin-Meta': 'false' }
+      headers: {
+        'X-Master-Key': JSONBIN_KEY,
+        'X-Bin-Meta': 'false'
+      }
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     if (data && data.done !== undefined) {
-      // Vérifier s'il y a des différences avec l'état local
+      // Remplacer entièrement l'état local par l'état remote
       const remoteStr = JSON.stringify(data.done);
       const localStr = JSON.stringify(state.done);
       if (remoteStr !== localStr) {
         state.done = data.done;
-        state.explicitChanges = {};
         saveState();
         softRefresh();
       }
     }
     setSyncStatus('ok', 'Sync OK — ' + new Date().toLocaleTimeString('fr-FR'));
   } catch(e) {
-    setSyncStatus('err', 'Erreur: ' + e.message);
+    setSyncStatus('err', 'Erreur pull: ' + e.message);
   }
 }
 
