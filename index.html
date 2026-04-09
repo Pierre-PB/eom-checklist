@@ -456,14 +456,7 @@
 <!-- SYNC BAR -->
 <div class="sync-bar">
   <div class="sync-dot" id="syncDot"></div>
-  <span id="syncStatus">Local (npoint.io non configuré)</span>
-  &nbsp;·&nbsp;
-  <span class="sync-toggle" onclick="toggleSyncConfig()">Configurer le partage ▾</span>
-  <div id="syncConfigBox" style="display:none;display:flex;gap:8px;align-items:center;flex:1">
-    &nbsp;
-    <input class="sync-input" id="npointUrl" placeholder="https://api.npoint.io/VOTRE_ID  (collez l'URL npoint.io ici)" />
-    <button class="btn primary" onclick="saveNpointUrl()">Sauver</button>
-  </div>
+  <span id="syncStatus">Connexion au serveur partagé...</span>
 </div>
 
 <!-- CONTROLS -->
@@ -842,7 +835,7 @@ function toggleTask(taskId) {
 
   updateGlobal();
   saveState();
-  pushToNpoint();
+  pushToJsonbin();
 }
 
 function refreshSectionHeader(section) {
@@ -979,7 +972,7 @@ function resetMonth() {
   state.collapsed = {};
   saveState();
   render();
-  pushToNpoint();
+  pushToJsonbin();
 }
 
 // ══════════════════════════════════════
@@ -1008,69 +1001,60 @@ function launchConfetti(count, baseColor) {
 }
 
 // ══════════════════════════════════════
-// NPOINT.IO SYNC
+// JSONBIN.IO SYNC
 // ══════════════════════════════════════
+const JSONBIN_ID = '69d77def36566621a89426c2';
+const JSONBIN_KEY = '$2a$10$1n4imevE0XCXKRi9tNTjluzr0DTERFys3k/f/GgjCngzvb9lofi8m';
+const JSONBIN_URL = 'https://api.jsonbin.io/v3/b/' + JSONBIN_ID;
+
 let syncInterval = null;
 
 function toggleSyncConfig() {
-  const box = document.getElementById('syncConfigBox');
-  box.style.display = box.style.display === 'none' ? 'flex' : 'none';
-}
-
-function saveNpointUrl() {
-  const url = document.getElementById('npointUrl').value.trim();
-  state.npointUrl = url;
-  saveState();
-  if (url) {
-    startSync();
-    syncNow();
-  }
-  document.getElementById('syncConfigBox').style.display = 'none';
+  // No config needed - hardcoded
 }
 
 function startSync() {
   if (syncInterval) clearInterval(syncInterval);
-  if (!state.npointUrl) return;
-  syncInterval = setInterval(pullFromNpoint, 30000);
-  pullFromNpoint();
+  syncInterval = setInterval(pullFromJsonbin, 30000);
+  pullFromJsonbin();
 }
 
 async function syncNow() {
-  await pushToNpoint();
-  await pullFromNpoint();
+  await pushToJsonbin();
+  await pullFromJsonbin();
 }
 
-async function pushToNpoint() {
-  if (!state.npointUrl) return;
+async function pushToJsonbin() {
   try {
-    const res = await fetch(state.npointUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const res = await fetch(JSONBIN_URL, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': JSONBIN_KEY
+      },
       body: JSON.stringify({ done: state.done, ts: Date.now() })
     });
     if (res.ok) setSyncStatus('ok', 'Sync OK — ' + new Date().toLocaleTimeString('fr-FR'));
-    else setSyncStatus('err', 'Erreur sync');
+    else setSyncStatus('err', 'Erreur sync ' + res.status);
   } catch(e) {
     setSyncStatus('err', 'Hors ligne');
   }
 }
 
-async function pullFromNpoint() {
-  if (!state.npointUrl) return;
+async function pullFromJsonbin() {
   try {
-    const res = await fetch(state.npointUrl + '?t=' + Date.now());
+    const res = await fetch(JSONBIN_URL + '/latest', {
+      headers: { 'X-Master-Key': JSONBIN_KEY }
+    });
     if (!res.ok) throw new Error();
     const data = await res.json();
-    if (data && data.done) {
-      const remoteDone = data.done;
-      // Merge: union of local + remote
+    if (data && data.record && data.record.done) {
       let changed = false;
-      for (const id of Object.keys(remoteDone)) {
+      for (const id of Object.keys(data.record.done)) {
         if (!state.done[id]) { state.done[id] = true; changed = true; }
       }
       if (changed) {
         saveState();
-        // Soft update (refresh checkboxes + bars)
         softRefresh();
       }
     }
@@ -1105,8 +1089,8 @@ function softRefresh() {
 loadState();
 initMonthSelect();
 render();
-if (state.npointUrl) startSync();
-setSyncStatus('', state.npointUrl ? 'npoint.io configuré' : 'Local — configurez npoint.io pour le partage multi-utilisateurs');
+startSync();
+setSyncStatus('', 'Connexion au serveur partagé...');
 </script>
 </body>
 </html>
