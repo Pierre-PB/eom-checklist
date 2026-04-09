@@ -1090,9 +1090,26 @@ function softRefresh() {
 // ══════════════════════════════════════
 loadState();
 initMonthSelect();
-render();
-startSync();
-setSyncStatus('', 'Connexion au serveur partagé...');
+setSyncStatus('', 'Chargement...');
+
+// Toujours puller le bon état depuis le serveur AVANT d'afficher
+(async () => {
+  try {
+    const res = await fetch(JSONBIN_URL + '/latest', {
+      headers: { 'X-Master-Key': JSONBIN_KEY, 'X-Bin-Meta': 'false' }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.done !== undefined) {
+        state.done = data.done; // Remplacer l'état local par le remote
+        saveState();
+      }
+    }
+  } catch(e) {}
+  render();
+  startSync();
+  setSyncStatus('ok', 'Sync OK — ' + new Date().toLocaleTimeString('fr-FR'));
+})();
 </script>
 </body>
 </html>
