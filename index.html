@@ -1044,14 +1044,28 @@ async function pushToJsonbin() {
 async function pullFromJsonbin() {
   try {
     const res = await fetch(JSONBIN_URL + '/latest', {
-      headers: { 'X-Master-Key': JSONBIN_KEY }
+      headers: {
+        'X-Master-Key': JSONBIN_KEY,
+        'X-Bin-Meta': 'false'
+      }
     });
-    if (!res.ok) throw new Error();
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
-    if (data && data.record && data.record.done) {
+    if (data && data.done !== undefined) {
+      // Cherche si remote a des clés que local n'a pas
       let changed = false;
-      for (const id of Object.keys(data.record.done)) {
-        if (!state.done[id]) { state.done[id] = true; changed = true; }
+      for (const id of Object.keys(data.done)) {
+        if (!state.done[id]) {
+          state.done[id] = true;
+          changed = true;
+        }
+      }
+      // Cherche si local a des clés que remote n'a pas (tâche décochée ailleurs)
+      for (const id of Object.keys(state.done)) {
+        if (!data.done[id]) {
+          delete state.done[id];
+          changed = true;
+        }
       }
       if (changed) {
         saveState();
@@ -1060,7 +1074,7 @@ async function pullFromJsonbin() {
     }
     setSyncStatus('ok', 'Sync OK — ' + new Date().toLocaleTimeString('fr-FR'));
   } catch(e) {
-    setSyncStatus('err', 'Erreur connexion');
+    setSyncStatus('err', 'Erreur: ' + e.message);
   }
 }
 
