@@ -1015,7 +1015,7 @@ function toggleSyncConfig() {
 
 function startSync() {
   if (syncInterval) clearInterval(syncInterval);
-  syncInterval = setInterval(pullFromJsonbin, 10000);
+  syncInterval = setInterval(pullFromJsonbin, 20000);
   pullFromJsonbin();
 }
 
@@ -1025,7 +1025,7 @@ async function syncNow() {
 }
 
 let lastPushTime = 0;
-const PUSH_LOCK_MS = 8000; // bloquer les pulls pendant 8s après un push
+const PUSH_LOCK_MS = 15000; // bloquer les pulls pendant 15s après un push
 
 async function pushToJsonbin() {
   lastPushTime = Date.now();
