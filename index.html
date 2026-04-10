@@ -146,8 +146,15 @@
   .person-tag {
     font-size:10px; font-weight:500; padding:2px 7px; border-radius:99px;
     background:rgba(0,0,0,0.1); color:#2d3e56; white-space:nowrap; transition:all .15s;
+    cursor:pointer; user-select:none;
   }
+  .person-tag:hover { background:rgba(0,0,0,0.18); transform:scale(1.05); }
   .person-tag.highlight { background:rgba(96,200,245,0.3); color:#7dd3fc; }
+  /* Badge removed = barré */
+  .person-tag.removed {
+    background:rgba(248,113,113,0.12); color:#f87171;
+    text-decoration:line-through; opacity:0.5;
+  }
 
   /* ── DELETE BUTTON (visible on hover) ── */
   .task-delete {
@@ -224,6 +231,84 @@
   @media(max-width:600px){
     .controls{padding:12px 14px 4px;} .content{padding:14px;} .header{padding:12px 14px;gap:12px;} .task-text{font-size:12px;}
   }
+
+  /* ── EDIT BUTTON ── */
+  .task-edit {
+    width:22px; height:22px; border-radius:5px; border:1px solid rgba(56,189,248,0.3);
+    background:rgba(56,189,248,0.08); cursor:pointer; font-size:11px; color:#38bdf8;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    transition:all .15s; padding:0; line-height:1;
+  }
+  .task-edit:hover { background:rgba(56,189,248,0.2); border-color:rgba(56,189,248,0.6); transform:scale(1.1); }
+
+  /* ── EDIT FORM INLINE ── */
+  .task-edit-form {
+    display:flex; flex-direction:column; gap:8px;
+    padding:10px 18px 12px; border-top:1px solid rgba(0,0,0,0.08);
+    background:rgba(255,255,255,0.25); animation:slideDown .15s ease;
+  }
+  .task-edit-form input {
+    width:100%; padding:7px 10px; background:var(--bg);
+    border:1px solid rgba(56,189,248,0.3); border-radius:8px;
+    font-family:'DM Sans',sans-serif; font-size:13px; color:var(--text);
+  }
+  .task-edit-form input:focus { outline:1px solid rgba(56,189,248,0.5); }
+  .task-edit-people { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .task-edit-people label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; }
+
+  /* ── VUE PERSONNE ── */
+  #personView { display:none; padding:20px 24px; max-width:1200px; }
+  #personView.active { display:block; }
+  #mainContent.hidden { display:none; }
+
+  .pv-header {
+    display:flex; align-items:center; gap:12px; margin-bottom:20px;
+  }
+  .pv-avatar {
+    width:40px; height:40px; border-radius:50%; display:flex; align-items:center;
+    justify-content:center; font-family:'Syne',sans-serif; font-weight:700; font-size:16px;
+    color:#fff; flex-shrink:0;
+  }
+  .pv-name { font-family:'Syne',sans-serif; font-weight:700; font-size:20px; }
+  .pv-stats { font-size:12px; color:var(--muted); }
+  .pv-progress { flex:1; }
+  .pv-bar-bg { height:6px; background:rgba(0,0,0,0.1); border-radius:99px; overflow:hidden; margin-top:4px; }
+  .pv-bar-fill { height:100%; border-radius:99px; transition:width .4s; }
+
+  .pv-section-title {
+    font-family:'Syne',sans-serif; font-size:11px; font-weight:700; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--muted); margin:20px 0 8px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .pv-section-title::after { content:''; flex:1; height:1px; background:var(--border); }
+  .pv-section-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+
+  .pv-task {
+    display:flex; align-items:center; gap:10px; padding:9px 14px;
+    background:var(--bg2); border:1px solid var(--border); border-radius:8px;
+    margin-bottom:5px; transition:background .15s;
+  }
+  .pv-task:hover { background:var(--bg3); }
+
+  /* Checkbox assignation */
+  .pv-checkbox {
+    width:18px; height:18px; border-radius:5px; flex-shrink:0;
+    border:2px solid rgba(26,37,53,0.35); display:flex; align-items:center;
+    justify-content:center; cursor:pointer; transition:all .2s;
+  }
+  .pv-checkbox::after { content:'✓'; font-size:11px; font-weight:700; color:#fff; opacity:0; transform:scale(.5); transition:all .2s; }
+  .pv-task.assigned .pv-checkbox { background:#38bdf8; border-color:transparent; }
+  .pv-task.assigned .pv-checkbox::after { opacity:1; transform:scale(1); }
+
+  .pv-task-text { flex:1; font-size:13px; line-height:1.4; }
+  .pv-task.assigned .pv-task-text { color:var(--text); }
+  .pv-task:not(.assigned) .pv-task-text { color:var(--muted); }
+
+  /* Badge "fait" */
+  .pv-done-badge {
+    font-size:10px; padding:2px 7px; border-radius:99px;
+    background:rgba(52,211,153,0.15); color:#34d399; font-weight:600; flex-shrink:0;
+  }
 </style>
 </head>
 <body>
@@ -273,6 +358,8 @@
 
 <!-- MAIN CONTENT -->
 <div class="content" id="mainContent"></div>
+<!-- VUE PAR PERSONNE -->
+<div id="personView"></div>
 
 <script>
 // ══════════════════════════════════════════════════════
@@ -602,12 +689,24 @@ function buildTask(task, color) {
     <div class="checkbox"></div>
     <div class="task-text">${task.text}</div>
     <div class="task-people">${peopleHTML}</div>
+    <button class="task-edit" title="Modifier cette tâche">✎</button>
     <button class="task-delete" title="Supprimer cette tâche">✕</button>
   `;
 
-  // Coche — clic sur checkbox ou texte
+  // Coche — clic sur checkbox uniquement
   div.querySelector('.checkbox').addEventListener('click', (e) => { e.stopPropagation(); toggleTask(task.id); });
-  div.querySelector('.task-text').addEventListener('click', (e) => { e.stopPropagation(); toggleTask(task.id); });
+
+  // Édition — clic sur texte ou bouton ✎
+  div.querySelector('.task-text').addEventListener('click', (e) => { e.stopPropagation(); openEditForm(task.id); });
+  div.querySelector('.task-edit').addEventListener('click', (e) => { e.stopPropagation(); openEditForm(task.id); });
+
+  // Clic direct sur un badge personne → toggle rapide
+  div.querySelectorAll('.person-tag').forEach(tag => {
+    tag.addEventListener('click', (e) => {
+      e.stopPropagation();
+      quickTogglePerson(task.id, tag.getAttribute('data-person'));
+    });
+  });
 
   // Suppression
   div.querySelector('.task-delete').addEventListener('click', (e) => {
@@ -616,6 +715,147 @@ function buildTask(task, color) {
   });
 
   return div;
+}
+
+// ── Ouvrir le formulaire d'édition inline sous la tâche ──
+function openEditForm(taskId) {
+  // Fermer tout autre formulaire d'édition ouvert
+  document.querySelectorAll('.task-edit-form').forEach(f => f.remove());
+
+  const sections = getSections();
+  let task = null, sectionColor = '#38bdf8';
+  sections.forEach(s => {
+    const found = s.tasks.find(t => t.id === taskId);
+    if (found) { task = found; sectionColor = s.color; }
+  });
+  if (!task) return;
+
+  const taskEl = document.getElementById('task-' + taskId);
+  if (!taskEl) return;
+
+  const form = document.createElement('div');
+  form.className = 'task-edit-form';
+  form.id = 'editform-' + taskId;
+
+  const peopleChips = ALL_PEOPLE.map(p => {
+    const isSelected = task.people.map(x => x.toUpperCase()).includes(p.toUpperCase());
+    return `<span class="people-chip${isSelected ? ' selected' : ''}" data-person="${p}"
+      onclick="this.classList.toggle('selected')">${p.charAt(0)+p.slice(1).toLowerCase()}</span>`;
+  }).join('');
+
+  form.innerHTML = `
+    <input id="editinput-${taskId}" value="${task.text.replace(/"/g, '&quot;')}" />
+    <div class="task-edit-people">
+      <label>Personnes :</label>
+      ${peopleChips}
+    </div>
+    <div class="add-task-actions">
+      <button class="btn-save" onclick="saveEditTask('${taskId}')">Enregistrer</button>
+      <button class="btn-cancel" onclick="closeEditForm('${taskId}')">Annuler</button>
+    </div>
+  `;
+
+  // Insérer après la tâche
+  taskEl.insertAdjacentElement('afterend', form);
+
+  // Focus + Entrée pour valider
+  const inp = form.querySelector('input');
+  if (inp) {
+    inp.focus();
+    inp.setSelectionRange(inp.value.length, inp.value.length);
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') saveEditTask(taskId);
+      if (e.key === 'Escape') closeEditForm(taskId);
+    });
+  }
+}
+
+function closeEditForm(taskId) {
+  const form = document.getElementById('editform-' + taskId);
+  if (form) form.remove();
+}
+
+
+// ── Toggle rapide d'une personne en cliquant sur son badge ──
+function quickTogglePerson(taskId, person) {
+  const sections = getSections();
+  let task = null;
+  sections.forEach(s => { const t = s.tasks.find(t => t.id === taskId); if (t) task = t; });
+  if (!task) return;
+
+  const p = person.toUpperCase();
+  const idx = task.people.findIndex(x => x.toUpperCase() === p);
+
+  if (idx !== -1) {
+    // Enlever — mais pas si c'est la dernière personne
+    if (task.people.length === 1) {
+      // Feedback visuel : flash rouge
+      const tag = document.querySelector(`#task-${taskId} .person-tag[data-person="${p}"]`);
+      if (tag) { tag.classList.add('removed'); setTimeout(() => tag.classList.remove('removed'), 600); }
+      return;
+    }
+    task.people.splice(idx, 1);
+  } else {
+    // Ajouter
+    task.people.push(p);
+  }
+
+  state.sections = sections;
+
+  // Mettre à jour le DOM de la tâche
+  const taskEl = document.getElementById('task-' + taskId);
+  if (taskEl) {
+    const peopleDiv = taskEl.querySelector('.task-people');
+    peopleDiv.innerHTML = task.people.map(p =>
+      `<span class="person-tag" data-person="${p.toUpperCase()}">${p.charAt(0)+p.slice(1).toLowerCase()}</span>`
+    ).join('');
+    taskEl.setAttribute('data-people', task.people.join(',').toUpperCase());
+    // Réattacher les listeners sur les nouveaux tags
+    taskEl.querySelectorAll('.person-tag').forEach(tag => {
+      tag.addEventListener('click', (e) => {
+        e.stopPropagation();
+        quickTogglePerson(taskId, tag.getAttribute('data-person'));
+      });
+    });
+  }
+
+  saveLocalState();
+  pushToJsonbin();
+  applyPersonFilter();
+}
+
+function saveEditTask(taskId) {
+  const inp = document.getElementById('editinput-' + taskId);
+  const newText = inp ? inp.value.trim() : '';
+  if (!newText) return;
+
+  const form = document.getElementById('editform-' + taskId);
+  const selected = [...form.querySelectorAll('.people-chip.selected')].map(c => c.getAttribute('data-person').toUpperCase());
+  const newPeople = selected.length > 0 ? selected : ['PIERRE'];
+
+  // Mettre à jour dans state
+  const sections = getSections();
+  sections.forEach(s => {
+    const t = s.tasks.find(t => t.id === taskId);
+    if (t) { t.text = newText; t.people = newPeople; }
+  });
+  state.sections = sections;
+
+  closeEditForm(taskId);
+  saveLocalState();
+  pushToJsonbin();
+
+  // Mettre à jour le DOM de la tâche sans re-render complet
+  const taskEl = document.getElementById('task-' + taskId);
+  if (taskEl) {
+    taskEl.querySelector('.task-text').textContent = newText;
+    const peopleDiv = taskEl.querySelector('.task-people');
+    peopleDiv.innerHTML = newPeople.map(p =>
+      `<span class="person-tag" data-person="${p.toUpperCase()}">${p}</span>`
+    ).join('');
+    taskEl.setAttribute('data-people', newPeople.join(',').toUpperCase());
+  }
+  applyPersonFilter();
 }
 
 // ── Formulaire d'ajout inline ──
@@ -805,7 +1045,117 @@ function filterPerson(chipEl) {
   document.querySelectorAll('.chip[data-person]').forEach(c => c.classList.remove('active'));
   chipEl.classList.add('active');
   currentPerson = chipEl.getAttribute('data-person');
-  applyPersonFilter();
+
+  if (currentPerson === 'ALL') {
+    // Vue normale
+    document.getElementById('mainContent').classList.remove('hidden');
+    document.getElementById('personView').classList.remove('active');
+    applyPersonFilter();
+  } else {
+    // Vue par personne
+    document.getElementById('mainContent').classList.add('hidden');
+    renderPersonView(currentPerson);
+    document.getElementById('personView').classList.add('active');
+  }
+}
+
+// ── Vue par personne ──
+function renderPersonView(person) {
+  const pv = document.getElementById('personView');
+  const sections = getSections();
+  const color = personColor(person);
+
+  // Collecter toutes les tâches (assignées ou non)
+  let totalAssigned = 0, totalDone = 0;
+  const bySection = sections.map(s => {
+    const tasks = s.tasks; // toutes les tâches de la section
+    const assigned = tasks.filter(t => isPersonInTask(person, t));
+    totalAssigned += assigned.length;
+    totalDone += assigned.filter(t => state.done[t.id]).length;
+    return { section: s, tasks };
+  }).filter(x => x.tasks.length > 0);
+
+  const pct = totalAssigned > 0 ? Math.round(totalDone / totalAssigned * 100) : 0;
+  const label = person.charAt(0) + person.slice(1).toLowerCase();
+
+  let html = `
+    <div class="pv-header">
+      <div class="pv-avatar" style="background:${color}">${person.charAt(0)}</div>
+      <div>
+        <div class="pv-name">${label}</div>
+        <div class="pv-stats">${totalAssigned} tâches assignées · ${totalDone} faites · ${pct}%</div>
+      </div>
+      <div class="pv-progress" style="max-width:220px">
+        <div class="pv-bar-bg"><div class="pv-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      </div>
+    </div>
+  `;
+
+  bySection.forEach(({ section, tasks }) => {
+    // Trier : assignées en premier, puis non assignées
+    const assigned = tasks.filter(t => isPersonInTask(person, t));
+    const notAssigned = tasks.filter(t => !isPersonInTask(person, t));
+    const all = [...assigned, ...notAssigned];
+
+    html += `
+      <div class="pv-section-title">
+        <div class="pv-section-dot" style="background:${section.color}"></div>
+        ${section.label}
+        <span style="font-size:10px;color:${section.color};font-weight:600">${assigned.length}/${tasks.length}</span>
+      </div>
+    `;
+
+    all.forEach(task => {
+      const isAssigned = isPersonInTask(person, task);
+      const isDone = !!state.done[task.id];
+      html += `
+        <div class="pv-task${isAssigned ? ' assigned' : ''}" id="pvtask-${task.id}" onclick="pvToggleAssign('${task.id}','${person}')">
+          <div class="pv-checkbox"></div>
+          <div class="pv-task-text">${task.text}</div>
+          ${isDone && isAssigned ? '<div class="pv-done-badge">✓ fait</div>' : ''}
+        </div>
+      `;
+    });
+  });
+
+  pv.innerHTML = html;
+}
+
+function isPersonInTask(person, task) {
+  return task.people.some(p => p.toUpperCase() === person.toUpperCase() || 
+    (person === 'EQUIPE' && p.toUpperCase().startsWith('EQUIPE')));
+}
+
+function personColor(person) {
+  const colors = {
+    PIERRE:'#38bdf8', CEDRIC:'#a78bfa', LIAM:'#34d399',
+    LOURDES:'#fb923c', MAHER:'#4ade80', ABDUL:'#f472b6', EQUIPE:'#fbbf24'
+  };
+  return colors[person] || '#38bdf8';
+}
+
+function pvToggleAssign(taskId, person) {
+  const sections = getSections();
+  let task = null;
+  sections.forEach(s => { const t = s.tasks.find(t => t.id === taskId); if (t) task = t; });
+  if (!task) return;
+
+  const p = person.toUpperCase();
+  const idx = task.people.findIndex(x => x.toUpperCase() === p);
+
+  if (idx !== -1) {
+    if (task.people.length === 1) return; // Ne pas laisser vide
+    task.people.splice(idx, 1);
+  } else {
+    task.people.push(p);
+  }
+
+  state.sections = sections;
+  saveLocalState();
+  pushToJsonbin();
+
+  // Re-render la vue personne
+  renderPersonView(person);
 }
 
 function applyPersonFilter() {
