@@ -256,6 +256,58 @@
   .task-edit-people { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
   .task-edit-people label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; }
 
+  /* ── MODAL PERSONNES ── */
+  .modal-overlay {
+    display:none; position:fixed; inset:0; z-index:500;
+    background:rgba(10,20,40,0.55); backdrop-filter:blur(4px);
+    align-items:center; justify-content:center;
+  }
+  .modal-overlay.open { display:flex; }
+  .modal-box {
+    background:#cdd5e2; border:1px solid rgba(0,0,0,0.15); border-radius:16px;
+    padding:24px; width:360px; max-width:90vw;
+    box-shadow:0 20px 60px rgba(0,0,0,0.4);
+    animation:slideDown .18s ease;
+  }
+  .modal-title {
+    font-family:'Syne',sans-serif; font-weight:800; font-size:15px;
+    margin-bottom:18px; display:flex; align-items:center; justify-content:space-between;
+  }
+  .modal-close {
+    width:26px; height:26px; border-radius:6px; border:1px solid rgba(0,0,0,0.15);
+    background:transparent; cursor:pointer; font-size:14px; color:var(--muted);
+    display:flex; align-items:center; justify-content:center; transition:all .15s;
+  }
+  .modal-close:hover { background:rgba(248,113,113,0.15); color:#f87171; border-color:rgba(248,113,113,0.3); }
+  .people-list { display:flex; flex-direction:column; gap:6px; margin-bottom:18px; max-height:280px; overflow-y:auto; }
+  .people-row {
+    display:flex; align-items:center; gap:10px; padding:7px 10px;
+    background:rgba(255,255,255,0.3); border-radius:8px; border:1px solid rgba(0,0,0,0.08);
+  }
+  .people-row-avatar {
+    width:28px; height:28px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Syne',sans-serif; font-weight:700; font-size:11px; color:#fff;
+  }
+  .people-row-name { flex:1; font-size:13px; font-weight:500; }
+  .people-row-del {
+    width:22px; height:22px; border-radius:5px; border:1px solid rgba(248,113,113,0.35);
+    background:rgba(248,113,113,0.1); cursor:pointer; font-size:11px; color:#f87171;
+    display:flex; align-items:center; justify-content:center; transition:all .15s;
+  }
+  .people-row-del:hover { background:rgba(248,113,113,0.3); border-color:rgba(248,113,113,0.6); }
+  .modal-add-row { display:flex; gap:8px; align-items:center; }
+  .modal-input {
+    flex:1; padding:7px 10px; background:var(--bg); border:1px solid rgba(56,189,248,0.3);
+    border-radius:8px; font-family:'DM Sans',sans-serif; font-size:13px; color:var(--text);
+  }
+  .modal-input:focus { outline:1px solid rgba(56,189,248,0.5); }
+  .modal-input::placeholder { color:var(--muted); }
+  .modal-color-pick {
+    width:32px; height:32px; border-radius:8px; border:1px solid rgba(0,0,0,0.15);
+    cursor:pointer; padding:2px; background:transparent;
+  }
+
   /* ── VUE PERSONNE ── */
   #personView { display:none; padding:20px 24px; max-width:1200px; }
   #personView.active { display:block; }
@@ -326,6 +378,7 @@
   </div>
   <div class="header-actions">
     <select id="monthSelect" class="month-badge" onchange="changeMonth()" style="cursor:pointer"></select>
+    <button class="btn" onclick="openPeopleModal()">👥 Personnes</button>
     <button class="btn primary" onclick="syncNow()">⟳ Sync</button>
     <button class="btn danger" onclick="resetMonth()">↺ Reset</button>
   </div>
@@ -337,17 +390,27 @@
   <span id="syncStatus">Connexion au serveur partagé...</span>
 </div>
 
+<!-- MODAL GESTION DES PERSONNES -->
+<div class="modal-overlay" id="peopleModal" onclick="if(event.target===this)closePeopleModal()">
+  <div class="modal-box">
+    <div class="modal-title">
+      👥 Gérer les personnes
+      <button class="modal-close" onclick="closePeopleModal()">✕</button>
+    </div>
+    <div class="people-list" id="peopleList"></div>
+    <div class="modal-add-row">
+      <input class="modal-input" id="newPersonName" placeholder="Nouveau nom…" maxlength="30"
+        onkeydown="if(event.key==='Enter')addPerson()" />
+      <input type="color" class="modal-color-pick" id="newPersonColor" value="#38bdf8" title="Couleur" />
+      <button class="btn-save" onclick="addPerson()">Ajouter</button>
+    </div>
+  </div>
+</div>
+
 <!-- CONTROLS -->
 <div class="controls">
   <label>Personne :</label>
-  <div class="chip active" data-person="ALL"      onclick="filterPerson(this)">Tous</div>
-  <div class="chip"        data-person="PIERRE"   onclick="filterPerson(this)">Pierre</div>
-  <div class="chip"        data-person="CEDRIC"   onclick="filterPerson(this)">Cédric</div>
-  <div class="chip"        data-person="LIAM"     onclick="filterPerson(this)">Liam</div>
-  <div class="chip"        data-person="LOURDES"  onclick="filterPerson(this)">Lourdes</div>
-  <div class="chip"        data-person="MAHER"    onclick="filterPerson(this)">Maher</div>
-  <div class="chip"        data-person="ABDUL"    onclick="filterPerson(this)">Abdul</div>
-  <div class="chip"        data-person="EQUIPE"   onclick="filterPerson(this)">Équipes</div>
+  <div id="personChips"></div>
   &nbsp;
   <div class="search-wrap">
     <span class="search-icon">🔍</span>
@@ -363,9 +426,32 @@
 
 <script>
 // ══════════════════════════════════════════════════════
-// PERSONNES DISPONIBLES (pour le formulaire d'ajout)
+// PERSONNES — liste dynamique
 // ══════════════════════════════════════════════════════
-const ALL_PEOPLE = ['PIERRE','CEDRIC','LIAM','LOURDES','MAHER','ABDUL','EQUIPE'];
+const DEFAULT_PEOPLE = [
+  {name:'PIERRE',  color:'#38bdf8'},
+  {name:'CEDRIC',  color:'#a78bfa'},
+  {name:'LIAM',    color:'#34d399'},
+  {name:'LOURDES', color:'#fb923c'},
+  {name:'MAHER',   color:'#fbbf24'},
+  {name:'ABDUL',   color:'#f472b6'},
+  {name:'EQUIPE',  color:'#94a3b8'},
+];
+
+// Rétrocompatibilité : si people est un tableau de strings → convertir
+function normalizePeople(raw) {
+  if (!raw || !Array.isArray(raw) || raw.length === 0) return DEFAULT_PEOPLE;
+  if (typeof raw[0] === 'string') return raw.map(n => ({name:n, color:'#38bdf8'}));
+  return raw;
+}
+
+function getPeople() {
+  return normalizePeople(state.people);
+}
+// Pour rétrocompatibilité avec les endroits qui utilisent ALL_PEOPLE (tableau de strings)
+function getPeopleNames() {
+  return getPeople().map(p => p.name);
+}
 
 // ══════════════════════════════════════════════════════
 // DONNÉES PAR DÉFAUT (utilisées uniquement si JSONbin est vide)
@@ -555,6 +641,7 @@ const JSONBIN_URL = 'https://api.jsonbin.io/v3/b/' + JSONBIN_ID;
 let state = {
   done:          {},        // taskId → true
   sections:      null,      // sera chargé depuis JSONbin (ou DEFAULT_SECTIONS)
+  people:        null,      // sera chargé depuis JSONbin (ou DEFAULT_PEOPLE)
   selectedMonth: null,
   collapsed:     {}
 };
@@ -602,12 +689,37 @@ function changeMonth() {
 }
 
 // ══════════════════════════════════════════════════════
+// CHIPS PERSONNES — rendu dynamique
+// ══════════════════════════════════════════════════════
+function renderPersonChips() {
+  const wrap = document.getElementById('personChips');
+  if (!wrap) return;
+  const people = getPeople();
+
+  // Construire les chips
+  let html = `<div class="chip active" data-person="ALL" onclick="filterPerson(this)">Tous</div>`;
+  people.forEach(p => {
+    const label = p.name.charAt(0) + p.name.slice(1).toLowerCase();
+    html += `<div class="chip" data-person="${p.name}" onclick="filterPerson(this)" style="border-color:transparent"
+      onmouseenter="this.style.borderColor='${p.color}55'" onmouseleave="if(!this.classList.contains('active'))this.style.borderColor='transparent'"
+      >${label}</div>`;
+  });
+  wrap.innerHTML = html;
+
+  // Restaurer le filtre actif
+  wrap.querySelectorAll('.chip').forEach(c => {
+    c.classList.toggle('active', c.getAttribute('data-person') === currentPerson);
+  });
+}
+
+// ══════════════════════════════════════════════════════
 // RENDER
 // ══════════════════════════════════════════════════════
 function getSections() {
   return (state.sections && state.sections.length > 0) ? state.sections : DEFAULT_SECTIONS;
 }
 function render() {
+  renderPersonChips();
   const container = document.getElementById('mainContent');
   container.innerHTML = '';
   (getSections()).forEach(section => {
@@ -737,7 +849,7 @@ function openEditForm(taskId) {
   form.className = 'task-edit-form';
   form.id = 'editform-' + taskId;
 
-  const peopleChips = ALL_PEOPLE.map(p => {
+  const peopleChips = getPeopleNames().map(p => {
     const isSelected = task.people.map(x => x.toUpperCase()).includes(p.toUpperCase());
     return `<span class="people-chip${isSelected ? ' selected' : ''}" data-person="${p}"
       onclick="this.classList.toggle('selected')">${p.charAt(0)+p.slice(1).toLowerCase()}</span>`;
@@ -865,7 +977,7 @@ function buildAddForm(sectionId) {
   form.id = 'addform-' + sectionId;
 
   // Chips personnes
-  const peopleChips = ALL_PEOPLE.map(p =>
+  const peopleChips = getPeopleNames().map(p =>
     `<span class="people-chip" data-person="${p}" onclick="togglePeopleChip(this,'${sectionId}')">${p.charAt(0)+p.slice(1).toLowerCase()}</span>`
   ).join('');
 
@@ -1200,6 +1312,95 @@ function toggleShowDone() {
 }
 
 // ══════════════════════════════════════════════════════
+// GESTION DES PERSONNES — Modal
+// ══════════════════════════════════════════════════════
+const PERSON_COLORS = ['#38bdf8','#34d399','#a78bfa','#fb923c','#fbbf24','#f472b6','#f87171','#22d3ee','#4ade80','#e879f9'];
+
+function openPeopleModal() {
+  renderPeopleList();
+  document.getElementById('peopleModal').classList.add('open');
+  document.getElementById('newPersonName').focus();
+}
+
+function closePeopleModal() {
+  document.getElementById('peopleModal').classList.remove('open');
+}
+
+function renderPeopleList() {
+  const list = document.getElementById('peopleList');
+  const people = getPeople();
+  list.innerHTML = people.map((p, i) => {
+    const label = p.name.charAt(0) + p.name.slice(1).toLowerCase();
+    return `<div class="people-row">
+      <div class="people-row-avatar" style="background:${p.color}">${label.charAt(0)}</div>
+      <div class="people-row-name">${label}</div>
+      <button class="people-row-del" onclick="removePerson(${i})" title="Supprimer">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function addPerson() {
+  const inp = document.getElementById('newPersonName');
+  const colorInp = document.getElementById('newPersonColor');
+  const name = inp.value.trim().toUpperCase().replace(/\s+/g,'_');
+  if (!name) { inp.focus(); return; }
+
+  const people = getPeople();
+  if (people.find(p => p.name === name)) {
+    inp.style.borderColor = '#f87171';
+    setTimeout(() => inp.style.borderColor = '', 1000);
+    return;
+  }
+
+  people.push({ name, color: colorInp.value });
+  state.people = people;
+  inp.value = '';
+  // Proposer une couleur suivante automatiquement
+  colorInp.value = PERSON_COLORS[people.length % PERSON_COLORS.length];
+
+  saveLocalState();
+  pushToJsonbin();
+  renderPeopleList();
+  renderPersonChips();
+}
+
+function removePerson(index) {
+  const people = getPeople();
+  const p = people[index];
+  if (!p) return;
+
+  // Vérifier si la personne est utilisée dans des tâches
+  const sections = getSections();
+  let usageCount = 0;
+  sections.forEach(s => s.tasks.forEach(t => {
+    if (t.people.some(x => x.toUpperCase() === p.name)) usageCount++;
+  }));
+
+  const label = p.name.charAt(0) + p.name.slice(1).toLowerCase();
+  const msg = usageCount > 0
+    ? `Supprimer "${label}" ?\nCette personne est assignée à ${usageCount} tâche(s).\nElle sera retirée de toutes ces tâches.`
+    : `Supprimer "${label}" ?`;
+
+  if (!confirm(msg)) return;
+
+  // Retirer la personne de toutes les tâches
+  if (usageCount > 0) {
+    sections.forEach(s => s.tasks.forEach(t => {
+      t.people = t.people.filter(x => x.toUpperCase() !== p.name);
+      if (t.people.length === 0) t.people = ['EQUIPE'];
+    }));
+    state.sections = sections;
+  }
+
+  people.splice(index, 1);
+  state.people = people;
+  saveLocalState();
+  pushToJsonbin();
+  renderPeopleList();
+  render();
+}
+
+// ══════════════════════════════════════════════════════
 // RESET
 // ══════════════════════════════════════════════════════
 function resetMonth() {
@@ -1247,6 +1448,7 @@ async function pushToJsonbin() {
     const payload = {
       done:     state.done,
       sections: getSections(),
+      people:   getPeople(),
       ts:       Date.now()
     };
     const res = await fetch(JSONBIN_URL, {
@@ -1286,6 +1488,13 @@ async function pullFromJsonbin() {
       const rStr = JSON.stringify(data.sections);
       const lStr = JSON.stringify(getSections());
       if (rStr !== lStr) { state.sections = data.sections; changed = true; }
+    }
+
+    // Mise à jour des personnes
+    if (data.people && data.people.length > 0) {
+      const rStr = JSON.stringify(normalizePeople(data.people));
+      const lStr = JSON.stringify(getPeople());
+      if (rStr !== lStr) { state.people = normalizePeople(data.people); changed = true; }
     }
 
     if (changed) { saveLocalState(); render(); }
@@ -1355,6 +1564,15 @@ render();
     } else {
       // JSONbin n'a pas de sections → on y pousse les défauts
       await pushToJsonbin();
+    }
+
+    // Personnes
+    if (data.people && data.people.length > 0) {
+      const normalized = normalizePeople(data.people);
+      if (JSON.stringify(normalized) !== JSON.stringify(getPeople())) {
+        state.people = normalized;
+        changed = true;
+      }
     }
 
     if (changed) { saveLocalState(); render(); }
