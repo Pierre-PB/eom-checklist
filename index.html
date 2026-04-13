@@ -272,6 +272,24 @@
   .task-edit-people { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
   .task-edit-people label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; }
 
+  /* ── USER SELECTOR ── */
+  .user-select-wrap { display:flex; align-items:center; gap:6px; }
+  .user-select-wrap label { font-size:11px; color:var(--muted); white-space:nowrap; }
+  .user-select {
+    font-family:'DM Sans',sans-serif; font-size:12px; font-weight:500;
+    padding:4px 10px; border-radius:8px; border:1px solid rgba(56,189,248,0.3);
+    background:rgba(56,189,248,0.08); color:#38bdf8; cursor:pointer;
+  }
+  .user-select:focus { outline:1px solid rgba(56,189,248,0.5); }
+
+  /* ── DONE META (timestamp + who) ── */
+  .task-done-meta {
+    display:none; font-size:10px; color:#8fa0b8; white-space:nowrap;
+    flex-shrink:0; font-style:italic; line-height:1.3; text-align:right;
+  }
+  .task-item.done .task-done-meta { display:block; }
+  .task-done-meta strong { color:#60a5c8; font-style:normal; font-weight:600; }
+
   /* ── MODAL PERSONNES ── */
   .modal-overlay {
     display:none; position:fixed; inset:0; z-index:500;
@@ -393,6 +411,10 @@
     <div class="global-pct" id="globalPct">0%</div>
   </div>
   <div class="header-actions">
+    <div class="user-select-wrap">
+      <label>Je suis :</label>
+      <select id="currentUserSelect" class="user-select" onchange="setCurrentUser(this.value)"></select>
+    </div>
     <select id="monthSelect" class="month-badge" onchange="changeMonth()" style="cursor:pointer"></select>
     <button class="btn" onclick="openPeopleModal()">👥 Personnes</button>
     <button class="btn primary" onclick="syncNow()">⟳ Sync</button>
@@ -441,6 +463,47 @@
 <div id="personView"></div>
 
 <script>
+// ══════════════════════════════════════════════════════
+// UTILISATEUR COURANT
+// ══════════════════════════════════════════════════════
+let currentUser = localStorage.getItem('yesss_current_user') || '';
+
+function setCurrentUser(name) {
+  currentUser = name;
+  localStorage.setItem('yesss_current_user', name);
+}
+
+function initUserSelect() {
+  const sel = document.getElementById('currentUserSelect');
+  if (!sel) return;
+  const people = getPeople();
+  sel.innerHTML = '<option value="">— Choisir —</option>' +
+    people.filter(p => p.name !== 'EQUIPE')
+          .map(p => `<option value="${p.name}">${p.name.charAt(0)+p.name.slice(1).toLowerCase()}</option>`)
+          .join('');
+  if (currentUser) sel.value = currentUser;
+}
+
+// Helper : lire la valeur done (rétrocompat true vs {ts,by})
+function getDoneEntry(taskId) {
+  const v = state.done[taskId];
+  if (!v) return null;
+  if (v === true) return { ts: null, by: null }; // ancien format
+  return v;
+}
+
+function formatDoneMeta(entry) {
+  if (!entry) return '';
+  const parts = [];
+  if (entry.by) parts.push(`<strong>${entry.by.charAt(0)+entry.by.slice(1).toLowerCase()}</strong>`);
+  if (entry.ts) {
+    const d = new Date(entry.ts);
+    parts.push(d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'}) +
+               ' ' + d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}));
+  }
+  return parts.join(' · ');
+}
+
 // ══════════════════════════════════════════════════════
 // DRAG STATE
 // ══════════════════════════════════════════════════════
@@ -741,6 +804,7 @@ function getSections() {
 }
 function render() {
   renderPersonChips();
+  initUserSelect();
   const container = document.getElementById('mainContent');
   container.innerHTML = '';
   (getSections()).forEach(section => {
@@ -820,12 +884,16 @@ function buildTask(task, color) {
     `<span class="person-tag" data-person="${p.toUpperCase()}">${p}</span>`
   ).join('');
 
+  const entry    = getDoneEntry(task.id);
+  const doneMeta = entry ? formatDoneMeta(entry) : '';
+
   div.innerHTML = `
     <div class="drag-handle" title="Déplacer la tâche">
       <span></span><span></span><span></span>
     </div>
     <div class="checkbox"></div>
     <div class="task-text">${task.text}</div>
+    <div class="task-done-meta">${doneMeta}</div>
     <div class="task-people">${peopleHTML}</div>
     <button class="task-edit" title="Modifier cette tâche">✎</button>
     <button class="task-delete" title="Supprimer cette tâche">✕</button>
@@ -1182,11 +1250,27 @@ function deleteTask(taskId) {
 // TOGGLE TÂCHE (cocher / décocher)
 // ══════════════════════════════════════════════════════
 function toggleTask(taskId) {
-  if (state.done[taskId]) delete state.done[taskId];
-  else { state.done[taskId] = true; checkSectionComplete(taskId); }
+  if (state.done[taskId]) {
+    delete state.done[taskId];
+  } else {
+    if (!currentUser) {
+      alert('Veuillez d\'abord sélectionner votre nom dans le menu "Je suis :" en haut à droite.');
+      return;
+    }
+    state.done[taskId] = { ts: Date.now(), by: currentUser };
+    checkSectionComplete(taskId);
+  }
 
   const el = document.getElementById('task-' + taskId);
-  if (el) el.classList.toggle('done', !!state.done[taskId]);
+  if (el) {
+    el.classList.toggle('done', !!state.done[taskId]);
+    // Mettre à jour le meta sans re-render complet
+    const metaEl = el.querySelector('.task-done-meta');
+    if (metaEl) {
+      const entry = getDoneEntry(taskId);
+      metaEl.innerHTML = entry ? formatDoneMeta(entry) : '';
+    }
+  }
 
   const sections = getSections();
   const section  = sections.find(s => s.tasks.some(t => t.id === taskId));
