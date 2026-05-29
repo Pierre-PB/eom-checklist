@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>YESSS UK — End of Month Checklist</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<!-- Firebase SDK (compat = global `firebase` namespace) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <style>
   :root {
     --bg: #e8edf5;
@@ -728,11 +731,31 @@ const DEFAULT_SECTIONS = [
 ];
 
 // ══════════════════════════════════════════════════════
-// JSONBIN — configuration
+// FIREBASE — configuration
 // ══════════════════════════════════════════════════════
-const JSONBIN_ID  = '69d77def36566621a89426c2';
-const JSONBIN_KEY = '$2a$10$1n4imevE0XCXKRi9tNTjluzr0DTERFys3k/f/GgjCngzvb9lofi8m';
-const JSONBIN_URL = 'https://api.jsonbin.io/v3/b/' + JSONBIN_ID;
+// >>> COLLER LA CONFIG firebaseConfig DEPUIS LA CONSOLE FIREBASE ICI <<<
+// Project Settings → Vos applications → app Web → Configuration SDK
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyDHYoMarrOlFozsVuZW482WR98C0juVZ1I",
+  authDomain:        "eom-checklist-yesss.firebaseapp.com",
+  databaseURL:       "https://eom-checklist-yesss-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId:         "eom-checklist-yesss",
+  storageBucket:     "eom-checklist-yesss.firebasestorage.app",
+  messagingSenderId: "125768710661",
+  appId:             "1:125768710661:web:86fcbb68cc8a6a0010ba6c"
+};
+
+let dbRef = null;
+try {
+  if (!FIREBASE_CONFIG.apiKey.startsWith('PASTE')) {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    dbRef = firebase.database().ref('eom-checklist');
+  } else {
+    console.warn('Firebase config not yet pasted — running in local-only mode.');
+  }
+} catch(e) {
+  console.error('Firebase init failed:', e);
+}
 
 // ══════════════════════════════════════════════════════
 // STATE
@@ -1636,96 +1659,107 @@ function launchConfetti(count, baseColor) {
 }
 
 // ══════════════════════════════════════════════════════
-// JSONBIN — PUSH (done + sections)
+// FIREBASE — PUSH (done + sections + people)
 // ══════════════════════════════════════════════════════
-let lastPushTime = 0;
-const PUSH_LOCK_MS = 15000;
+// Echo-guard : after we write, Firebase echoes our own write back via
+// the on('value') listener. We tag each push with a clientId so we can
+// ignore the echo and avoid useless re-renders / "ping-pong".
+const CLIENT_ID = Math.random().toString(36).slice(2,10);
+let lastLocalPushTs = 0;
 
-async function pushToJsonbin() {
-  lastPushTime = Date.now();
+async function pushToJsonbin() {  // name kept for minimal call-site churn
+  if (!dbRef) {
+    setSyncStatus('err', 'Firebase non configuré');
+    return;
+  }
   setSyncStatus('spin', 'Sync en cours…');
   try {
+    const ts = Date.now();
+    lastLocalPushTs = ts;
     const payload = {
-      done:     state.done,
+      done:     state.done || {},
       sections: getSections(),
       people:   getPeople(),
-      ts:       Date.now()
+      ts:       ts,
+      writer:   CLIENT_ID
     };
-    const res = await fetch(JSONBIN_URL, {
-      method:  'PUT',
-      headers: { 'Content-Type':'application/json', 'X-Master-Key': JSONBIN_KEY },
-      body:    JSON.stringify(payload)
-    });
-    if (res.ok) setSyncStatus('ok', 'Sync OK — ' + new Date().toLocaleTimeString('fr-FR'));
-    else        setSyncStatus('err', 'Erreur push ' + res.status);
+    await dbRef.set(payload);
+    setSyncStatus('ok', 'Sync OK — ' + new Date().toLocaleTimeString('fr-FR'));
   } catch(e) {
-    setSyncStatus('err', 'Hors ligne');
+    setSyncStatus('err', 'Erreur push: ' + (e.message || e.code || 'inconnue'));
   }
 }
 
 // ══════════════════════════════════════════════════════
-// JSONBIN — PULL (done + sections)
+// FIREBASE — PULL one-shot (used by "⟳ Sync" button)
 // ══════════════════════════════════════════════════════
-async function pullFromJsonbin() {
-  if (Date.now() - lastPushTime < PUSH_LOCK_MS) return;
+async function pullFromJsonbin() {  // name kept for minimal call-site churn
+  if (!dbRef) return;
   try {
-    const res = await fetch(JSONBIN_URL + '/latest', {
-      headers: { 'X-Master-Key': JSONBIN_KEY, 'X-Bin-Meta': 'false' }
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    let changed = false;
-
-    // Mise à jour des coches
-    if (data.done !== undefined) {
-      const rStr = JSON.stringify(data.done);
-      const lStr = JSON.stringify(state.done);
-      if (rStr !== lStr) { state.done = data.done; changed = true; }
-    }
-
-    // Mise à jour des tâches (structure) — ignorer si vide
-    if (data.sections && data.sections.length > 0) {
-      const rStr = JSON.stringify(data.sections);
-      const lStr = JSON.stringify(getSections());
-      if (rStr !== lStr) { state.sections = data.sections; changed = true; }
-    }
-
-    // Mise à jour des personnes
-    if (data.people && data.people.length > 0) {
-      const rStr = JSON.stringify(normalizePeople(data.people));
-      const lStr = JSON.stringify(getPeople());
-      if (rStr !== lStr) { state.people = normalizePeople(data.people); changed = true; }
-    }
-
-    if (changed) { saveLocalState(); render(); }
+    const snap = await dbRef.once('value');
+    const data = snap.val();
+    if (data) applyRemoteData(data, /*forceRender*/ true);
     setSyncStatus('ok', 'Sync OK — ' + new Date().toLocaleTimeString('fr-FR'));
   } catch(e) {
-    setSyncStatus('err', 'Erreur pull: ' + e.message);
+    setSyncStatus('err', 'Erreur pull: ' + (e.message || e.code || 'inconnue'));
   }
+}
+
+// Apply a remote snapshot to local state, with change detection.
+function applyRemoteData(data, forceRender) {
+  if (!data) return false;
+  let changed = false;
+
+  if (data.done !== undefined) {
+    const rStr = JSON.stringify(data.done);
+    const lStr = JSON.stringify(state.done || {});
+    if (rStr !== lStr) { state.done = data.done; changed = true; }
+  }
+  if (data.sections && data.sections.length > 0) {
+    const rStr = JSON.stringify(data.sections);
+    const lStr = JSON.stringify(getSections());
+    if (rStr !== lStr) { state.sections = data.sections; changed = true; }
+  }
+  if (data.people && data.people.length > 0) {
+    const rStr = JSON.stringify(normalizePeople(data.people));
+    const lStr = JSON.stringify(getPeople());
+    if (rStr !== lStr) { state.people = normalizePeople(data.people); changed = true; }
+  }
+
+  if (changed || forceRender) { saveLocalState(); render(); }
+  return changed;
 }
 
 async function syncNow() {
   await pushToJsonbin();
-  lastPushTime = 0; // Forcer le pull
   await pullFromJsonbin();
 }
 
 function setSyncStatus(status, msg) {
   const dot = document.getElementById('syncDot');
   const txt = document.getElementById('syncStatus');
+  if (!dot || !txt) return;
   dot.className = 'sync-dot ' + status;
   txt.textContent = msg;
 }
 
-let syncInterval = null;
+// ══════════════════════════════════════════════════════
+// FIREBASE — REAL-TIME LISTENER (replaces the 20s polling)
+// ══════════════════════════════════════════════════════
 function startSync() {
-  if (syncInterval) clearInterval(syncInterval);
-  syncInterval = setInterval(pullFromJsonbin, 20000); // Pull toutes les 20s
+  if (!dbRef) return;
+  dbRef.on('value', snap => {
+    const data = snap.val();
+    if (!data) return;
+    // Skip echo of our own write (Firebase echoes back set() calls)
+    if (data.writer === CLIENT_ID && data.ts === lastLocalPushTs) return;
+    applyRemoteData(data, /*forceRender*/ false);
+    setSyncStatus('ok', 'Sync OK — ' + new Date().toLocaleTimeString('fr-FR'));
+  }, err => {
+    setSyncStatus('err', 'Listener erreur: ' + (err.message || err.code));
+  });
 }
 
-// ══════════════════════════════════════════════════════
-// INIT
-// ══════════════════════════════════════════════════════
 // ══════════════════════════════════════════════════════
 // INIT — affichage immédiat, sync en arrière-plan
 // ══════════════════════════════════════════════════════
@@ -1739,50 +1773,26 @@ if (!state.sections || state.sections.length === 0) {
 }
 render();
 
-// 2. Sync JSONbin en arrière-plan
+// 2. Brancher Firebase (real-time) en arrière-plan
 (async () => {
+  if (!dbRef) {
+    setSyncStatus('err', 'Firebase non configuré — mode local seul');
+    return;
+  }
   try {
-    const res = await fetch(JSONBIN_URL + '/latest', {
-      headers: { 'X-Master-Key': JSONBIN_KEY, 'X-Bin-Meta': 'false' }
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    let changed = false;
-
-    // Coches
-    if (data.done && JSON.stringify(data.done) !== JSON.stringify(state.done)) {
-      state.done = data.done;
-      changed = true;
-    }
-
-    // Sections (ignorer si vide — JSONbin ancienne version)
-    if (data.sections && data.sections.length > 0) {
-      if (JSON.stringify(data.sections) !== JSON.stringify(state.sections)) {
-        state.sections = data.sections;
-        changed = true;
-      }
+    // First-load snapshot: si Firebase est vide, on y pousse les défauts
+    const snap = await dbRef.once('value');
+    const data = snap.val();
+    if (!data || !data.sections || data.sections.length === 0) {
+      await pushToJsonbin();  // seed Firebase
     } else {
-      // JSONbin n'a pas de sections → on y pousse les défauts
-      await pushToJsonbin();
+      applyRemoteData(data, /*forceRender*/ true);
     }
-
-    // Personnes
-    if (data.people && data.people.length > 0) {
-      const normalized = normalizePeople(data.people);
-      if (JSON.stringify(normalized) !== JSON.stringify(getPeople())) {
-        state.people = normalized;
-        changed = true;
-      }
-    }
-
-    if (changed) { saveLocalState(); render(); }
     setSyncStatus('ok', 'Sync OK — ' + new Date().toLocaleTimeString('fr-FR'));
-
   } catch(e) {
     setSyncStatus('err', 'Hors ligne — données locales affichées');
   }
-
-  startSync();
+  startSync();  // démarre le listener temps réel
 })();
 </script>
 </body>
